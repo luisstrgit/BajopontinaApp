@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control de Envases - Bajopontina S.A.</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+    <!-- MÓDULO LOGIN -->
+    <div id="login-screen" class="container">
+        <div class="card login-card">
+            <h2>Distribuidora Bajopontina S.A.</h2>
+            <p>Acceso al Sistema de Control de Envases</p>
+            <form id="form-login">
+                <input type="email" id="login-email" placeholder="Correo electrónico" value="admin@bajopontina.pe" required>
+                <input type="password" id="login-password" placeholder="Contraseña" value="123456" required>
+                <button type="submit" class="btn">Iniciar Sesión</button>
+            </form>
+            <p id="login-error" class="error-msg"></p>
+        </div>
+    </div>
+
+    <!-- PANEL PRINCIPAL -->
+    <div id="main-app" class="hidden">
+        <header>
+            <h1>Bajopontina S.A. | Control de Envases</h1>
+            <div>
+                <span id="user-display"></span>
+                <button id="btn-logout" class="btn-secondary">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <!-- ✨ NUEVO: TARJETAS DE TOTALES (DASHBOARD) ✨ -->
+        <div class="container dashboard-container">
+            <div class="dashboard-cards">
+                <div class="dash-card card-green">
+                    <span class="dash-title">Cajas Llenas (Listas)</span>
+                    <span class="dash-value" id="total-llenas">0</span>
+                </div>
+                <div class="dash-card card-blue">
+                    <span class="dash-title">Cajas Vacías (Por llenar)</span>
+                    <span class="dash-value" id="total-vacias">0</span>
+                </div>
+                <div class="dash-card card-red">
+                    <span class="dash-title">Total Mermas (Rotas)</span>
+                    <span class="dash-value" id="total-mermas">0</span>
+                </div>
+            </div>
+        </div>
+        <!-- ============================================== -->
+
+        <nav class="tabs">
+            <button class="tab-btn active" onclick="showTab('stock')">1. Control de Stock</button>
+            <button class="tab-btn" onclick="showTab('movimientos')">2. Movimiento de Envases</button>
+            <button class="tab-btn" onclick="showTab('mermas')">3. Registro de Mermas</button>
+            <button class="tab-btn" onclick="showTab('reportes')">4. Reportes e Historial</button>
+        </nav>
+
+        <main class="container">
+            <!-- MÓDULO 1: CONTROL DE STOCK -->
+            <section id="tab-stock" class="tab-content active">
+                <h2>Inventario de Envases y Cajas</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Producto</th>
+                            <th>Material</th>
+                            <th>Capacidad</th>
+                            <th>Stock Cajas Llenas</th>
+                            <th>Stock Cajas Vacías</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-stock-body"></tbody>
+                </table>
+            </section>
+
+            <!-- MÓDULO 2: MOVIMIENTOS -->
+            <section id="tab-movimientos" class="tab-content hidden">
+                <h2>Registrar Ingreso / Salida</h2>
+                <form id="form-movimiento" class="card">
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Producto:</label>
+                            <select id="mov-producto" required></select>
+                        </div>
+                        <div class="input-group">
+                            <label>Cliente / Sede:</label>
+                            <select id="mov-cliente" required>
+                                <option value="1">Distribuidora Lima Norte (Ate)</option>
+                                <option value="2">Comercial Huancayo S.A.C. (El Tambo)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Tipo de Movimiento:</label>
+                            <select id="mov-tipo" required>
+                                <option value="INGRESO_VACIOS">Ingreso de Vacíos</option>
+                                <option value="SALIDA_LLENOS">Salida de Llenos</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Cantidad de Cajas:</label>
+                            <input type="number" id="mov-cantidad" min="1" required>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Observaciones:</label>
+                        <input type="text" id="mov-obs" placeholder="Ej. Guía R-102">
+                    </div>
+
+                    <button type="submit" class="btn">Guardar Movimiento</button>
+                </form>
+            </section>
+
+            <!-- MÓDULO 3: MERMAS -->
+            <section id="tab-mermas" class="tab-content hidden">
+                <h2>Registro de Envases Dañados (Mermas)</h2>
+                <form id="form-merma" class="card">
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Producto:</label>
+                            <select id="merma-producto" required></select>
+                        </div>
+                        <div class="input-group">
+                            <label>Cantidad de Botellas Rotas:</label>
+                            <input type="number" id="merma-cantidad" min="1" required>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Causa:</label>
+                        <input type="text" id="merma-causa" placeholder="Ej. Caída en apilamiento" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-warning">Registrar Merma</button>
+                </form>
+            </section>
+
+            <!-- MÓDULO 4: REPORTES -->
+            <section id="tab-reportes" class="tab-content hidden">
+                <h2>Historial de Movimientos Registrados</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Cliente</th>
+                            <th>Tipo</th>
+                            <th>Cantidad</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-reportes-body"></tbody>
+                </table>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
