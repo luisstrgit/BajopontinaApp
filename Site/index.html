@@ -1,168 +1,249 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Control de Envases - Bajopontina S.A.</title>
-    <link rel="stylesheet" href="css/styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Control de Envases - Bajopontina S.A.</title>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+ 
+  <!-- INICIO DE SESIÓN (LOGIN) -->
+  <div id="login-screen" class="container">
+    <div class="card login-card">
+      <h2 style="color:#dc2626; margin-bottom: 10px;">Distribuidora Bajopontina S.A.</h2>
+      <p style="color:#64748b; margin-bottom: 20px;">Acceso al Sistema de Control de Envases</p>
+      <form id="form-login">
+        <label for="login-email">Correo Electrónico:</label>
+        <input type="email" id="login-email" value="admin@bajopontina.pe" required>
+        
+        <label for="login-password">Contraseña:</label>
+        <input type="password" id="login-password" value="123456" required>
+        
+        <button type="submit" class="btn">Iniciar Sesión</button>
+      </form>
+      <p id="login-error" class="error-msg"></p>
+    </div>
+  </div>
+ 
+  <!-- PANEL PRINCIPAL (MAIN APP) -->
+  <div id="main-app" class="hidden">
+    
+    <!-- CABECERA SUPERIOR -->
+    <header>
+      <h1>Bajopontina S.A. | Control de Envases</h1>
+      <div>
+        <span id="user-display"></span>
+        <button id="btn-info" class="btn-secondary">Bajopontina</button>
+        <button id="btn-ayuda" class="btn-secondary">Ayuda / Soporte</button>
+        <button id="btn-logout" class="btn-secondary">Cerrar Sesión</button>
+      </div>
+    </header>
 
-    <!-- MÓDULO LOGIN -->
-    <div id="login-screen" class="container">
-        <div class="card login-card">
-            <h2>Distribuidora Bajopontina S.A.</h2>
-            <p>Acceso al Sistema de Control de Envases</p>
-            <form id="form-login">
-                <input type="email" id="login-email" placeholder="Correo electrónico" value="admin@bajopontina.pe" required>
-                <input type="password" id="login-password" placeholder="Contraseña" value="123456" required>
-                <button type="submit" class="btn">Iniciar Sesión</button>
-            </form>
-            <p id="login-error" class="error-msg"></p>
+    <!-- DASHBOARD: TARJETAS DE INDICADORES -->
+    <div class="container dashboard-container">
+      <div class="dashboard-cards">
+        <div class="dash-card card-green">
+          <span class="dash-title">Cajas Llenas (Listas)</span>
+          <span class="dash-value" id="total-llenas">0</span>
         </div>
+        <div class="dash-card card-blue">
+          <span class="dash-title">Cajas Vacías (Por llenar)</span>
+          <span class="dash-value" id="total-vacias">0</span>
+        </div>
+        <div class="dash-card card-red">
+          <span class="dash-title">Total Mermas (Rotas)</span>
+          <span class="dash-value" id="total-mermas">0</span>
+        </div>
+      </div>
+
+      <!-- MENÚ DE PESTAÑAS -->
+      <nav class="tabs">
+        <button class="tab-btn active" onclick="showTab('stock')">1. Control de Stock</button>
+        <button class="tab-btn" onclick="showTab('movimientos')">2. Movimiento de Envases</button>
+        <button class="tab-btn" onclick="showTab('mermas')">3. Registro de Mermas</button>
+        <button class="tab-btn" onclick="showTab('reportes')">4. Reportes e Historial</button>
+      </nav>
+    </div>
+ 
+    <!-- CONTENIDO DE MÓDULOS -->
+    <main class="container">
+      
+      <!-- PESTAÑA 1: STOCK -->
+      <section id="tab-stock" class="tab-content active">
+        <h2>Inventario de Envases y Cajas</h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th>Material</th>
+              <th>Capacidad</th>
+              <th>Stock Cajas Llenas</th>
+              <th>Stock Cajas Vacías</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-stock-body"></tbody>
+        </table>
+      </section>
+ 
+      <!-- PESTAÑA 2: MOVIMIENTOS -->
+      <section id="tab-movimientos" class="tab-content hidden">
+        <h2>Registrar Ingreso / Salida</h2>
+        <form id="form-movimiento" class="card">
+          <div class="form-row">
+            <div class="input-group">
+              <label for="mov-producto">Producto:</label>
+              <select id="mov-producto" required></select>
+            </div>
+            <div class="input-group">
+              <label for="mov-cliente">Cliente / Sede Destino:</label>
+              <select id="mov-cliente" required>
+                <option value="1">Distribuidora Lima Norte (Ate)</option>
+                <option value="2">Comercial Huancayo S.A.C. (El Tambo)</option>
+                <option value="3">Sede Central Huaraz</option>
+                <option value="4">Distribuidora Huancavelica</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label for="mov-tipo">Tipo de Movimiento:</label>
+              <select id="mov-tipo" required>
+                <option value="INGRESO_VACIOS">Ingreso de Vacíos</option>
+                <option value="SALIDA_LLENOS">Salida de Llenos</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="mov-cantidad">Cantidad de Cajas:</label>
+              <input type="number" id="mov-cantidad" min="1" placeholder="Ej. 10" required>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="mov-obs">Observaciones:</label>
+            <input type="text" id="mov-obs" placeholder="Ej. Guía de Remisión R-102">
+          </div>
+          <button type="submit" class="btn">Guardar Movimiento</button>
+        </form>
+      </section>
+ 
+      <!-- PESTAÑA 3: MERMAS -->
+      <section id="tab-mermas" class="tab-content hidden">
+        <h2>Registro de Envases Dañados (Mermas)</h2>
+        <form id="form-merma" class="card">
+          <div class="form-row">
+            <div class="input-group">
+              <label for="merma-producto">Producto:</label>
+              <select id="merma-producto" required></select>
+            </div>
+            <div class="input-group">
+              <label for="merma-cantidad">Cantidad de Unidades Rotas:</label>
+              <input type="number" id="merma-cantidad" min="1" placeholder="Ej. 3" required>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="merma-causa">Causa de la Merma:</label>
+            <input type="text" id="merma-causa" placeholder="Ej. Caída durante apilamiento en camión" required>
+          </div>
+          <button type="submit" class="btn btn-warning">Registrar Merma</button>
+        </form>
+      </section>
+ 
+      <!-- PESTAÑA 4: REPORTES -->
+      <section id="tab-reportes" class="tab-content hidden">
+        <h2>Historial de Movimientos Registrados</h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Fecha y Hora</th>
+              <th>Producto</th>
+              <th>Cliente / Sede</th>
+              <th>Tipo Movimiento</th>
+              <th>Cajas</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-reportes-body"></tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- PANEL LATERAL DESLIZANTE (OFF-CANVAS DRAWER) -->
+  <div id="drawer-overlay" class="drawer-overlay"></div>
+  
+  <aside id="side-drawer" class="drawer">
+    <div class="drawer-header">
+      <h3 id="drawer-title">Información</h3>
+      <button id="btn-close-drawer" class="drawer-close">&times;</button>
     </div>
 
-    <!-- PANEL PRINCIPAL -->
-    <div id="main-app" class="hidden">
-        <header>
-            <h1>Bajopontina S.A. | Control de Envases</h1>
-            <div>
-                <span id="user-display"></span>
-                <button id="btn-logout" class="btn-secondary">Cerrar Sesión</button>
-            </div>
-        </header>
+    <div class="drawer-body">
+      
+      <!-- INFORMACIÓN COMPLETA DE BAJOPONTINA -->
+      <div id="drawer-content-info" class="drawer-content hidden">
+        <span class="drawer-badge">CDA Arca Continental Lindley</span>
+        
+        <p class="drawer-desc">
+          <strong>Distribuidora Bajopontina S.A.</strong> es la unidad estratégica encargada de la gestión logística, almacenamiento y balance físico de envases retornables de plástico PET y vidrio.
+        </p>
 
-        <!-- ✨ NUEVO: TARJETAS DE TOTALES (DASHBOARD) ✨ -->
-        <div class="container dashboard-container">
-            <div class="dashboard-cards">
-                <div class="dash-card card-green">
-                    <span class="dash-title">Cajas Llenas (Listas)</span>
-                    <span class="dash-value" id="total-llenas">0</span>
-                </div>
-                <div class="dash-card card-blue">
-                    <span class="dash-title">Cajas Vacías (Por llenar)</span>
-                    <span class="dash-value" id="total-vacias">0</span>
-                </div>
-                <div class="dash-card card-red">
-                    <span class="dash-title">Total Mermas (Rotas)</span>
-                    <span class="dash-value" id="total-mermas">0</span>
-                </div>
-            </div>
+        <div class="drawer-box">
+          <h4>📦 Funciones Principales del Sistema</h4>
+          <ul>
+            <li><strong>Recepción de Vacíos:</strong> Registro de envases devueltos por clientes o rutas de distribución.</li>
+            <li><strong>Despacho de Llenos:</strong> Salida de cajas con producto listo para comercialización.</li>
+            <li><strong>Control de Mermas:</strong> Monitoreo de roturas y botellas mermadas en almacén y transporte.</li>
+          </ul>
         </div>
-        <!-- ============================================== -->
 
-        <nav class="tabs">
-            <button class="tab-btn active" onclick="showTab('stock')">1. Control de Stock</button>
-            <button class="tab-btn" onclick="showTab('movimientos')">2. Movimiento de Envases</button>
-            <button class="tab-btn" onclick="showTab('mermas')">3. Registro de Mermas</button>
-            <button class="tab-btn" onclick="showTab('reportes')">4. Reportes e Historial</button>
-        </nav>
+        <div class="drawer-box">
+          <h4>📍 Cobertura y Sedes de Distribución</h4>
+          <p>Operaciones integradas con las sedes de <strong>Lima Norte (Ate)</strong>, <strong>Huancayo (El Tambo)</strong>, <strong>Huaraz</strong> y <strong>Huancavelica</strong>.</p>
+        </div>
 
-        <main class="container">
-            <!-- MÓDULO 1: CONTROL DE STOCK -->
-            <section id="tab-stock" class="tab-content active">
-                <h2>Inventario de Envases y Cajas</h2>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>Producto</th>
-                            <th>Material</th>
-                            <th>Capacidad</th>
-                            <th>Stock Cajas Llenas</th>
-                            <th>Stock Cajas Vacías</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbl-stock-body"></tbody>
-                </table>
-            </section>
+        <div class="drawer-box">
+          <h4>📌 Normativa Operativa</h4>
+          <p>Toda caja que ingrese o salga del centro de acopio debe contar obligatoriamente con su respectiva Guía de Remisión y ser auditada en tiempo real en esta plataforma.</p>
+        </div>
+      </div>
 
-            <!-- MÓDULO 2: MOVIMIENTOS -->
-            <section id="tab-movimientos" class="tab-content hidden">
-                <h2>Registrar Ingreso / Salida</h2>
-                <form id="form-movimiento" class="card">
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>Producto:</label>
-                            <select id="mov-producto" required></select>
-                        </div>
-                        <div class="input-group">
-                            <label>Cliente / Sede:</label>
-                            <select id="mov-cliente" required>
-                                <option value="1">Distribuidora Lima Norte (Ate)</option>
-                                <option value="2">Comercial Huancayo S.A.C. (El Tambo)</option>
-                            </select>
-                        </div>
-                    </div>
+      <!-- INFORMACIÓN COMPLETA DE AYUDA Y SOPORTE -->
+      <div id="drawer-content-ayuda" class="drawer-content hidden">
+        <p class="drawer-desc">
+          Si experimentas problemas para registrar movimientos, descuadres en el inventario o fallas con tus credenciales, contacta a los encargados:
+        </p>
 
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>Tipo de Movimiento:</label>
-                            <select id="mov-tipo" required>
-                                <option value="INGRESO_VACIOS">Ingreso de Vacíos</option>
-                                <option value="SALIDA_LLENOS">Salida de Llenos</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label>Cantidad de Cajas:</label>
-                            <input type="number" id="mov-cantidad" min="1" required>
-                        </div>
-                    </div>
+        <div class="drawer-box">
+          <span class="tag-role tag-red">Supervisión de Almacén</span>
+          <h4>Ing. Carlos Mendoza Torres</h4>
+          <p><strong>Tel / Cel:</strong> +51 987 654 321 (Anexo 102)</p>
+          <p><strong>Correo:</strong> cmendoza@bajopontina.pe</p>
+          <p><strong>Horario:</strong> Lunes a Sábado de 07:00 am a 05:00 pm</p>
+        </div>
 
-                    <div class="input-group">
-                        <label>Observaciones:</label>
-                        <input type="text" id="mov-obs" placeholder="Ej. Guía R-102">
-                    </div>
+        <div class="drawer-box">
+          <span class="tag-role tag-blue">Soporte TI / Sistemas</span>
+          <h4>Lic. Luis Salazar Espinoza</h4>
+          <p><strong>Tel / Cel:</strong> +51 912 345 678 (Anexo 105)</p>
+          <p><strong>Correo:</strong> soporte.ti@bajopontina.pe</p>
+          <p><strong>Atención:</strong> Restablecimiento de contraseñas y errores web</p>
+        </div>
 
-                    <button type="submit" class="btn">Guardar Movimiento</button>
-                </form>
-            </section>
+        <div class="drawer-box">
+          <h4>💡 Guía Rápida de Solución</h4>
+          <ul>
+            <li><strong>¿No cargan los datos?</strong> Presiona <code>Ctrl + F5</code> para refrescar la memoria caché del sistema.</li>
+            <li><strong>¿Stock no cuadra?</strong> Verifica que los movimientos de vacíos y mermas del día hayan sido guardados correctamente.</li>
+          </ul>
+        </div>
+      </div>
 
-            <!-- MÓDULO 3: MERMAS -->
-            <section id="tab-mermas" class="tab-content hidden">
-                <h2>Registro de Envases Dañados (Mermas)</h2>
-                <form id="form-merma" class="card">
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>Producto:</label>
-                            <select id="merma-producto" required></select>
-                        </div>
-                        <div class="input-group">
-                            <label>Cantidad de Botellas Rotas:</label>
-                            <input type="number" id="merma-cantidad" min="1" required>
-                        </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label>Causa:</label>
-                        <input type="text" id="merma-causa" placeholder="Ej. Caída en apilamiento" required>
-                    </div>
-
-                    <button type="submit" class="btn btn-warning">Registrar Merma</button>
-                </form>
-            </section>
-
-            <!-- MÓDULO 4: REPORTES -->
-            <section id="tab-reportes" class="tab-content hidden">
-                <h2>Historial de Movimientos Registrados</h2>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Fecha</th>
-                            <th>Producto</th>
-                            <th>Cliente</th>
-                            <th>Tipo</th>
-                            <th>Cantidad</th>
-                            <th>Usuario</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbl-reportes-body"></tbody>
-                </table>
-            </section>
-        </main>
     </div>
-
-    <script src="js/main.js"></script>
+  </aside>
+ 
+  <script src="js/main.js"></script>
 </body>
 </html>
