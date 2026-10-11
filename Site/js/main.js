@@ -1,11 +1,33 @@
-// CONFIGURACIÓN E INICIALIZACIÓN CONEXIÓN CON NODE.JS / SQL SERVER
+// CONFIGURACION E INICIALIZACION CONEXION CON NODE.JS / SQL SERVER
 const API_URL = 'http://localhost:3000/api';
 let currentUser = null;
+let authToken = null; // Token JWT que entrega el servidor al iniciar sesion
 let productosCache = [];
 
-// EVENTOS AL CARGAR LA PÁGINA
+// Guarda el fetch original y luego lo reemplaza por uno que agrega el token solo
+const fetchOriginal = fetch.bind(window);
+
+window.fetch = function (url, options) {
+  options = options || {};
+  if (authToken && String(url).indexOf(API_URL) === 0) {
+    options.headers = Object.assign({}, options.headers, { Authorization: 'Bearer ' + authToken });
+  }
+  return fetchOriginal(url, options);
+};
+
+// ESC: evita ataques XSS
+function esc(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// EVENTOS AL CARGAR LA PAGINA
 document.addEventListener('DOMContentLoaded', function () {
-  
+
   // 1. Botones de Cabecera y Drawer Lateral
   const btnInfo = document.getElementById('btn-info');
   const btnAyuda = document.getElementById('btn-ayuda');
@@ -17,17 +39,18 @@ document.addEventListener('DOMContentLoaded', function () {
   if (btnCloseDrawer) btnCloseDrawer.addEventListener('click', closeDrawer);
   if (drawerOverlay) drawerOverlay.addEventListener('click', closeDrawer);
 
-  // 2. Cerrar Sesión
+  // 2. Cerrar Sesion
   const btnLogout = document.getElementById('btn-logout');
   if (btnLogout) {
     btnLogout.addEventListener('click', function () {
       currentUser = null;
+      authToken = null;
       document.getElementById('main-app').classList.add('hidden');
       document.getElementById('login-screen').classList.remove('hidden');
     });
   }
 
-  // 3. Iniciar Sesión (Autenticación SQL Server)
+  // 3. Iniciar Sesion (Autenticacion SQL Server + token JWT)
   const formLogin = document.getElementById('form-login');
   if (formLogin) {
     formLogin.addEventListener('submit', async function (e) {
@@ -49,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (data.success) {
           currentUser = data.usuario;
+          authToken = data.token;
           iniciarSesionExitosa();
           if (errorMsg) errorMsg.innerText = '';
         } else {
@@ -56,14 +80,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       } catch (err) {
         console.error('Error al conectar Login con backend:', err);
-        // Fallback local si el servidor aún no valida login estricto
-        currentUser = { id_usuario: 1, nombre: email.split('@')[0] || 'Administrador', rol: 'Administrador' };
-        iniciarSesionExitosa();
+        if (errorMsg) errorMsg.innerText = 'No se pudo conectar con el servidor. Ejecuta: node server.js';
       }
     });
   }
 
-  // 4. Guardar Movimiento REAL en SQL Server (RF-02, RF-03)
+  // 4. Guardar Movimiento REAL en SQL Server
   const formMov = document.getElementById('form-movimiento');
   if (formMov) {
     formMov.addEventListener('submit', async function (e) {
@@ -94,21 +116,21 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = await response.json();
 
         if (data.success) {
-          alert('✅ ¡ÉXITO! Movimiento registrado y guardado en SQL Server.');
+          alert('EXITO: Movimiento registrado y guardado en SQL Server.');
           formMov.reset();
           await loadStock();
           await loadReportes();
         } else {
-          alert('❌ Error de SQL Server: ' + data.error);
+          alert('Error: ' + (data.error || data.message));
         }
       } catch (err) {
-        console.error('Error de conexión:', err);
-        alert('❌ Error de conexión: Asegúrate de que "node server.js" se esté ejecutando.');
+        console.error('Error de conexion:', err);
+        alert('Error de conexion: Asegurate de que "node server.js" se este ejecutando.');
       }
     });
   }
 
-  // 5. Guardar Merma REAL en SQL Server (RF-05)
+  // 5. Guardar Merma REAL en SQL Server
   const formMerma = document.getElementById('form-merma');
   if (formMerma) {
     formMerma.addEventListener('submit', async function (e) {
@@ -135,15 +157,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = await response.json();
 
         if (data.success) {
-          alert('✅ Merma registrada con éxito en SQL Server.');
+          alert('EXITO: Merma registrada en SQL Server.');
           formMerma.reset();
           await loadStock();
         } else {
-          alert('❌ Error al guardar merma: ' + data.error);
+          alert('Error al guardar merma: ' + (data.error || data.message));
         }
       } catch (err) {
         console.error('Error al registrar merma:', err);
-        alert('❌ Error de conexión al guardar la merma.');
+        alert('Error de conexion al guardar la merma.');
       }
     });
   }
@@ -167,18 +189,18 @@ function openDrawer(type) {
     if (contentInfo) contentInfo.classList.add('hidden');
   }
 
-  if (overlay) overlay.classList.add('active');
-  if (drawer) drawer.classList.add('active');
+  if (overlay) overlay.classList.add('open');
+  if (drawer) drawer.classList.add('open');
 }
 
 function closeDrawer() {
   const overlay = document.getElementById('drawer-overlay');
   const drawer = document.getElementById('side-drawer');
-  if (overlay) overlay.classList.remove('active');
-  if (drawer) drawer.classList.remove('active');
+  if (overlay) overlay.classList.remove('open');
+  if (drawer) drawer.classList.remove('open');
 }
 
-// INICIAR SESIÓN Y MOSTRAR DASHBOARD
+// INICIAR SESION Y MOSTRAR DASHBOARD
 function iniciarSesionExitosa() {
   const loginScreen = document.getElementById('login-screen');
   const mainApp = document.getElementById('main-app');
@@ -194,7 +216,7 @@ function iniciarSesionExitosa() {
   loadReportes();
 }
 
-// CAMBIO DE PESTAÑAS (TABS)
+// CAMBIO DE PESTANAS (TABS)
 window.showTab = function (tabName) {
   const contents = document.querySelectorAll('.tab-content');
   for (let i = 0; i < contents.length; i++) {
@@ -224,11 +246,12 @@ async function loadStock() {
   const tbody = document.getElementById('tbl-stock-body');
   try {
     const response = await fetch(`${API_URL}/productos`);
+    if (!response.ok) throw new Error('Respuesta ' + response.status);
     const productos = await response.json();
     productosCache = productos;
 
     if (tbody) {
-      tbody.innerHTML = '';
+      let html = '';
       let totalLlenas = 0;
       let totalVacias = 0;
 
@@ -238,16 +261,16 @@ async function loadStock() {
         totalLlenas += llenas;
         totalVacias += vacias;
 
-        const row = `<tr>
-          <td><strong>${p.codigo_sku || 'SKU'}</strong></td>
-          <td><strong>${p.nombre_producto}</strong></td>
-          <td>${p.material || 'PET / Vidrio'}</td>
-          <td>${p.capacidad || '12 unid.'}</td>
+        html += `<tr>
+          <td><strong>${esc(p.codigo_sku || 'SKU')}</strong></td>
+          <td><strong>${esc(p.nombre_producto)}</strong></td>
+          <td>${esc(p.material || 'PET / Vidrio')}</td>
+          <td>${esc(p.capacidad || '12 unid.')}</td>
           <td><strong style="color:#16a34a;">${llenas}</strong></td>
           <td><strong style="color:#2563eb;">${vacias}</strong></td>
         </tr>`;
-        tbody.innerHTML += row;
       });
+      tbody.innerHTML = html;
 
       const llenasEl = document.getElementById('total-llenas');
       const vaciasEl = document.getElementById('total-vacias');
@@ -266,19 +289,12 @@ function fillSelects() {
   const selectMov = document.getElementById('mov-producto');
   const selectMerma = document.getElementById('merma-producto');
 
-  if (selectMov) {
-    selectMov.innerHTML = '';
-    productosCache.forEach(p => {
-      selectMov.innerHTML += `<option value="${p.id_producto}">${p.nombre_producto} (${p.codigo_sku})</option>`;
-    });
-  }
-
-  if (selectMerma) {
-    selectMerma.innerHTML = '';
-    productosCache.forEach(p => {
-      selectMerma.innerHTML += `<option value="${p.id_producto}">${p.nombre_producto} (${p.codigo_sku})</option>`;
-    });
-  }
+  let opciones = '';
+  productosCache.forEach(p => {
+    opciones += `<option value="${esc(p.id_producto)}">${esc(p.nombre_producto)} (${esc(p.codigo_sku)})</option>`;
+  });
+  if (selectMov) selectMov.innerHTML = opciones;
+  if (selectMerma) selectMerma.innerHTML = opciones;
 }
 
 // CARGAR HISTORIAL REAL DE REPORTES DESDE SQL SERVER
@@ -288,25 +304,26 @@ async function loadReportes() {
 
   try {
     const response = await fetch(`${API_URL}/reportes/movimientos`);
+    if (!response.ok) throw new Error('Respuesta ' + response.status);
     const reportes = await response.json();
 
-    tbody.innerHTML = '';
+    let html = '';
     reportes.forEach(r => {
       const fecha = new Date(r.fecha_movimiento).toLocaleString('es-PE');
       const esIngreso = r.tipo_movimiento === 'INGRESO_VACIOS';
       const styleTipo = esIngreso ? 'style="color:#2563eb; font-weight:bold;"' : 'style="color:#dc2626; font-weight:bold;"';
 
-      const row = `<tr>
-        <td>${r.id_movimiento}</td>
-        <td>${fecha}</td>
-        <td>${r.nombre_producto || 'Producto ' + r.id_producto}</td>
-        <td>${r.razon_social || 'Sede Principal'}</td>
-        <td ${styleTipo}>${r.tipo_movimiento}</td>
-        <td><strong>${r.cantidad_cajas}</strong></td>
-        <td>${r.usuario || 'Sistema'}</td>
+      html += `<tr>
+        <td>${esc(r.id_movimiento)}</td>
+        <td>${esc(fecha)}</td>
+        <td>${esc(r.nombre_producto || 'Producto ' + r.id_producto)}</td>
+        <td>${esc(r.razon_social || 'Sede Principal')}</td>
+        <td ${styleTipo}>${esc(r.tipo_movimiento)}</td>
+        <td><strong>${esc(r.cantidad_cajas)}</strong></td>
+        <td>${esc(r.usuario || 'Sistema')}</td>
       </tr>`;
-      tbody.innerHTML += row;
     });
+    tbody.innerHTML = html;
   } catch (err) {
     console.error('Error cargando reportes:', err);
   }
