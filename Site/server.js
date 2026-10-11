@@ -1,181 +1,222 @@
+require('dotenv').config();
 const express = require('express');
-const sql = require('mssql');
 const cors = require('cors');
+const helmet = require('helmet');
+const sql = require('mssql');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'secreto_super_seguro_bajopontina';
 
-// Middlewares
-app.use(express.json());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.static('.'));
+app.use(express.json());
+app.use(express.static(__dirname));
 
-// Configuración de conexión a SQL Server
+// Configuración de conexión a SQL Server leyendo tu archivo .env intacto
 const dbConfig = {
-    user: 'sa',
-    password: 'FocusCRM2026',
-    server: '127.0.0.1',
-    port: 56719,
-    database: 'DB_Bajopontina_PA2',
-    options: {
-        encrypt: false,
-        trustServerCertificate: true
-    }
+  server: process.env.DB_SERVER || 'localhost',
+  database: process.env.DB_DATABASE || 'DB_Bajopontina_PA2',
+  ...(process.env.DB_USER ? {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+  } : {}),
+  options: {
+    instanceName: process.env.DB_INSTANCE || undefined,
+    encrypt: process.env.DB_ENCRYPT === 'true',
+    trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true' || true,
+    trustedConnection: !process.env.DB_USER
+  }
 };
 
-// Pool de conexión global
-let pool;
+sql.connect(dbConfig).then(pool => {
+  console.log('✅ Conectado a SQL Server');
+  app.locals.db = pool;
+}).catch(err => {
+  console.error('❌ Error al conectar a SQL Server:', err.message);
+});
 
-// Inicialización de la conexión con SQL Server
-async function initDbConnection() {
-    try {
-        pool = await sql.connect(dbConfig);
-        console.log('==================================================');
-        console.log('  CONEXIÓN EXITOSA A SQL SERVER: DB_Bajopontina_PA2');
-        console.log('==================================================');
-    } catch (err) {
-        console.error('❌ Error de conexión a SQL Server:', err.message);
-    }
+// MIDDLEWARES DE SEGURIDAD (JWT Y RBAC)
+function verificarToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ success: false, message: 'Token no proporcionado' });
+
+  jwt.verify(token, JWT_SECRET, (err, usuario) => {
+    if (err) return res.status(403).json({ success: false, message: 'Token invalido o expirado' });
+    req.usuario = usuario;
+    next();
+  });
 }
-initDbConnection();
 
-// ==========================================
-// 1. MÓDULO DE LOGIN (RF-01)
-// ==========================================
-app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const result = await pool.request()
-            .input('email', sql.NVarChar, email)
-            .input('password', sql.NVarChar, password)
-            .query('SELECT id_usuario, nombre, email, rol FROM dbo.Usuarios WHERE email = @email AND password = @password');
-
-        if (result.recordset.length > 0) {
-            res.json({ success: true, usuario: result.recordset[0] });
-        } else {
-            res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
-        }
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+function verificarRol(rolRequerido) {
+  return (req, res, next) => {
+    if (!req.usuario || req.usuario.rol !== rolRequerido) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado: Rol insuficiente' });
     }
+    next();
+  };
+}
+
+// RATE LIMITER EN MEMORIA PARA LOGIN (PARA IMAGEN 19)
+const intentosLogin = {};
+function rateLimiterLogin(req, res, next) {
+  const clientIp = req.ip || req.connection?.remoteAddress || '127.0.0.1';
+  const ahora = Date.now();
+  
+  if (!intentosLogin[clientIp] || ahora > intentosLogin[clientIp].resetTime) {
+    intentosLogin[clientIp] = { count: 0, resetTime: ahora + 60000 }; // Se reinicia cada 1 minuto
+  }
+  
+  intentosLogin[clientIp].count++;
+  
+  if (intentosLogin[clientIp].count > 5) {
+    return res.status(429).json({ success: false, message: 'Demasiados intentos fallidos. Bloqueado temporalmente.' });
+  }
+  next();
+}
+
+// API LOGIN (Autenticación con Rate Limiter y Status HTTP 401)
+app.post('/api/login', rateLimiterLogin, async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const pool = app.locals.db;
+    if (!pool) {
+      return res.status(500).json({ success: false, message: 'No hay conexión activa con SQL Server' });
+    }
+
+    const result = await pool.request()
+      .input('email', sql.NVarChar, email)
+      .query('SELECT * FROM dbo.Usuarios WHERE email = @email');
+
+    if (result.recordset.length === 0) {
+      return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+    }
+
+    const usuario = result.recordset[0];
+    const match = await bcrypt.compare(password, usuario.password);
+
+    // Soporta tanto contraseña encriptada (bcrypt) como texto plano
+    if (!match && password !== usuario.password) {
+      return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+    }
+
+    const token = jwt.sign(
+      { id_usuario: usuario.id_usuario, email: usuario.email, rol: usuario.rol },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      usuario: {
+        id_usuario: usuario.id_usuario,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error en el servidor', error: err.message });
+  }
 });
 
-// ==========================================
-// 2. MÓDULO DE CONTROL DE STOCK Y PRODUCTOS (RF-04)
-// ==========================================
+// RUTAS PROTEGIDAS PARA USUARIOS (/api/usuarios)
+app.get('/api/usuarios', verificarToken, verificarRol('Administrador'), async (req, res) => {
+  try {
+    const pool = app.locals.db;
+    const result = await pool.request().query('SELECT id_usuario, nombre, email, rol FROM dbo.Usuarios');
+    res.json({ success: true, usuarios: result.recordset });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/usuarios', verificarToken, verificarRol('Administrador'), async (req, res) => {
+  const { nombre, email, password, rol } = req.body;
+  try {
+    const pool = app.locals.db;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('email', sql.NVarChar, email)
+      .input('password', sql.NVarChar, hashedPassword)
+      .input('rol', sql.NVarChar, rol || 'Almacenero')
+      .query('INSERT INTO dbo.Usuarios (nombre, email, password, rol) VALUES (@nombre, @email, @password, @rol)');
+
+    res.json({ success: true, message: 'Usuario creado correctamente' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error al crear usuario', error: err.message });
+  }
+});
+
+// RUTAS DE LA APLICACIÓN WEB (Stock, Movimientos, Mermas, Reportes)
 app.get('/api/productos', async (req, res) => {
-    try {
-        const result = await pool.request().query('SELECT * FROM dbo.Productos_Envases');
-        res.json(result.recordset);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const pool = app.locals.db;
+    const result = await pool.request().query('SELECT * FROM dbo.Productos_Envases');
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ==========================================
-// 3. MÓDULO DE MOVIMIENTOS - INGRESO Y SALIDA (RF-02, RF-03)
-// ==========================================
 app.post('/api/movimientos', async (req, res) => {
-    let { id_producto, id_cliente, id_usuario, tipo_movimiento, cantidad_cajas, observaciones } = req.body;
-
-    // Normalización y sanitización de datos de entrada
-    id_producto = parseInt(id_producto) || 1;
-    id_cliente = parseInt(id_cliente) || 1;
-    id_usuario = parseInt(id_usuario) || 1;
-    cantidad_cajas = parseInt(cantidad_cajas) || 0;
-
-    // Estandarizar tipo de movimiento
-    let tipoNormalizado = 'INGRESO_VACIOS';
-    if (tipo_movimiento) {
-        const str = String(tipo_movimiento).toUpperCase();
-        if (str.includes('SALIDA') || str.includes('LLENOS')) {
-            tipoNormalizado = 'SALIDA_LLENOS';
-        } else {
-            tipoNormalizado = 'INGRESO_VACIOS';
-        }
-    }
-
-    try {
-        // 1. Guardar el movimiento en la bitácora
-        await pool.request()
-            .input('id_producto', sql.Int, id_producto)
-            .input('id_cliente', sql.Int, id_cliente)
-            .input('id_usuario', sql.Int, id_usuario)
-            .input('tipo_movimiento', sql.NVarChar, tipoNormalizado)
-            .input('cantidad_cajas', sql.Int, cantidad_cajas)
-            .input('observaciones', sql.NVarChar, observaciones || '')
-            .query(`
-                INSERT INTO dbo.Movimientos (id_producto, id_cliente, id_usuario, tipo_movimiento, cantidad_cajas, fecha_movimiento, observaciones)
-                VALUES (@id_producto, @id_cliente, @id_usuario, @tipo_movimiento, @cantidad_cajas, GETDATE(), @observaciones)
-            `);
-
-        // 2. Actualizar stock en tiempo real
-        if (tipoNormalizado === 'INGRESO_VACIOS') {
-            await pool.request()
-                .input('id_producto', sql.Int, id_producto)
-                .input('cantidad', sql.Int, cantidad_cajas)
-                .query('UPDATE dbo.Productos_Envases SET stock_cajas_vacias = stock_cajas_vacias + @cantidad WHERE id_producto = @id_producto');
-        } else if (tipoNormalizado === 'SALIDA_LLENOS') {
-            await pool.request()
-                .input('id_producto', sql.Int, id_producto)
-                .input('cantidad', sql.Int, cantidad_cajas)
-                .query('UPDATE dbo.Productos_Envases SET stock_cajas_llenas = stock_cajas_llenas - @cantidad WHERE id_producto = @id_producto');
-        }
-
-        console.log(`[SQL OK] Movimiento insertado con éxito: ${cantidad_cajas} cajas (${tipoNormalizado})`);
-        res.json({ success: true, message: 'Movimiento registrado y stock actualizado en SQL Server' });
-
-    } catch (err) {
-        console.error('❌ Error SQL al insertar movimiento:', err.message);
-        res.status(500).json({ success: false, error: err.message });
-    }
+  const { id_producto, id_cliente, id_usuario, tipo_movimiento, cantidad_cajas, observaciones } = req.body;
+  try {
+    const pool = app.locals.db;
+    await pool.request()
+      .input('id_producto', sql.Int, id_producto)
+      .input('id_cliente', sql.Int, id_cliente)
+      .input('id_usuario', sql.Int, id_usuario)
+      .input('tipo_movimiento', sql.VarChar, tipo_movimiento)
+      .input('cantidad_cajas', sql.Int, cantidad_cajas)
+      .input('observaciones', sql.VarChar, observaciones)
+      .query(`INSERT INTO dbo.Movimientos (id_producto, id_cliente, id_usuario, tipo_movimiento, cantidad_cajas, observaciones)
+             VALUES (@id_producto, @id_cliente, @id_usuario, @tipo_movimiento, @cantidad_cajas, @observaciones)`);
+    res.json({ success: true, message: 'Movimiento registrado correctamente' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// ==========================================
-// 4. MÓDULO DE MERMAS (RF-05)
-// ==========================================
 app.post('/api/mermas', async (req, res) => {
-    let { id_producto, id_usuario, cantidad_unidades_rotas, causa } = req.body;
-
-    id_producto = parseInt(id_producto) || 1;
-    id_usuario = parseInt(id_usuario) || 1;
-    cantidad_unidades_rotas = parseInt(cantidad_unidades_rotas) || 0;
-
-    try {
-        await pool.request()
-            .input('id_producto', sql.Int, id_producto)
-            .input('id_usuario', sql.Int, id_usuario)
-            .input('cantidad_unidades_rotas', sql.Int, cantidad_unidades_rotas)
-            .input('causa', sql.NVarChar, causa || 'Rotura en almacén')
-            .query('INSERT INTO dbo.Mermas (id_producto, id_usuario, cantidad_unidades_rotas, causa) VALUES (@id_producto, @id_usuario, @cantidad_unidades_rotas, @causa)');
-
-        res.json({ success: true, message: 'Merma registrada con éxito' });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+  const { id_producto, id_usuario, cantidad_unidades_rotas, causa } = req.body;
+  try {
+    const pool = app.locals.db;
+    await pool.request()
+      .input('id_producto', sql.Int, id_producto)
+      .input('id_usuario', sql.Int, id_usuario)
+      .input('cantidad_unidades_rotas', sql.Int, cantidad_unidades_rotas)
+      .input('causa', sql.VarChar, causa)
+      .query(`INSERT INTO dbo.Mermas (id_producto, id_usuario, cantidad_unidades_rotas, causa)
+             VALUES (@id_producto, @id_usuario, @cantidad_unidades_rotas, @causa)`);
+    res.json({ success: true, message: 'Merma registrada correctamente' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// ==========================================
-// 5. MÓDULO DE REPORTES (RF-06)
-// ==========================================
 app.get('/api/reportes/movimientos', async (req, res) => {
-    try {
-        const result = await pool.request().query(`
-            SELECT m.id_movimiento, p.nombre_producto, c.razon_social, u.nombre AS usuario,
-                   m.tipo_movimiento, m.cantidad_cajas, m.fecha_movimiento, m.observaciones
-            FROM dbo.Movimientos m
-            LEFT JOIN dbo.Productos_Envases p ON m.id_producto = p.id_producto
-            LEFT JOIN dbo.Clientes_Sedes c ON m.id_cliente = c.id_cliente
-            LEFT JOIN dbo.Usuarios u ON m.id_usuario = u.id_usuario
-            ORDER BY m.fecha_movimiento DESC
-        `);
-        res.json(result.recordset);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const pool = app.locals.db;
+    const result = await pool.request().query(`
+      SELECT m.id_movimiento, m.fecha_movimiento, p.nombre_producto, c.razon_social, m.tipo_movimiento, m.cantidad_cajas, u.nombre AS usuario
+      FROM dbo.Movimientos m
+      LEFT JOIN dbo.Productos_Envases p ON m.id_producto = p.id_producto
+      LEFT JOIN dbo.Clientes c ON m.id_cliente = c.id_cliente
+      LEFT JOIN dbo.Usuarios u ON m.id_usuario = u.id_usuario
+      ORDER BY m.fecha_movimiento DESC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Inicialización del servidor HTTP
-const PORT = 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor de Bajopontina ejecutándose en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor iniciado en http://localhost:3000`);
 });
